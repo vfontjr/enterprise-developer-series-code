@@ -1,0 +1,119 @@
+{
+  "id": "1",
+  "form_key": "contact-form",
+  "name": "Contact Us",
+  "description": "<p>The easiest way to contact us is by phone toll free: <a href=\"tel:8448423668\">844-VIC-FONT (842-3668)</a>.</p>\r\n<p>You can also email <a href=\"mailto:info@formidable-masterminds.com\">info@formidable-masterminds.com</a>.</p>\r\n<p>If you are working remotely and do not have access to an email client, you can send a message using the convenient form below. We'll return all inquiries as soon as possible.</p>\r\n",
+  "status": "published",
+  "parent_form_id": "0",
+  "logged_in": "0",
+  "is_template": "0",
+  "options": {
+    "success_action": "message",
+    "success_url": "",
+    "success_page_id": "",
+    "success_msg": "Your responses were successfully submitted. Thank you!",
+    "edit_msg": "Your submission was successfully saved.",
+    "draft_msg": "Your draft has been saved.",
+    "logged_in_role": "",
+    "single_entry_type": "user",
+    "cookie_expiration": "8000",
+    "editable_role": "",
+    "open_editable_role": "-1",
+    "edit_action": "message",
+    "edit_url": "",
+    "edit_page_id": "",
+    "protect_files": "0",
+    "open_status": "",
+    "open_date": "2020-04-14 08:02",
+    "close_date": "",
+    "max_entries": "",
+    "closed_msg": "<p>This form is currently closed for submissions.</p>",
+    "custom_style": "1",
+    "submit_value": "Send Message",
+    "edit_value": "Update",
+    "submit_align": "",
+    "submit_conditions": {
+      "show_hide": "show",
+      "any_all": "all"
+    },
+    "form_class": "",
+    "before_html": "<legend class=\"frm_screen_reader\">[form_name]</legend>\r\n[if form_name]<h3 class=\"frm_form_title\">[form_name]</h3>[\/if form_name]\r\n[if form_description]<div class=\"frm_description fm-form-description\">[form_description]</div>[\/if form_description]",
+    "after_html": "",
+    "submit_html": "<div class=\"frm_submit\">\r\n[if back_button]<button type=\"submit\" name=\"frm_prev_page\" formnovalidate=\"formnovalidate\" class=\"frm_prev_page\" [back_hook]>[back_label]</button>[\/if back_button]\r\n<button class=\"frm_button_submit fm-form-submit\" type=\"submit\"  [button_action]>[button_label]</button>\r\n[if save_draft]<a href=\"#\" tabindex=\"0\" class=\"frm_save_draft\" [draft_hook]>[draft_label]</a>[\/if save_draft]\r\n</div>",
+    "affiliatewp": {
+      "referral_description_field": "",
+      "purchase_amount_field": "",
+      "referral_type": "sale"
+    },
+    "show_form": 0,
+    "akismet": "",
+    "no_save": 0,
+    "ajax_load": 0,
+    "js_validate": 0,
+    "save_draft": 0,
+    "copy": 0,
+    "single_entry": 0,
+    "ajax_submit": 0,
+    "prev_value": "Previous",
+    "rootline": "",
+    "rootline_titles_on": 0,
+    "rootline_titles": [],
+    "rootline_lines_off": 0,
+    "rootline_numbers_off": 0,
+    "on_submit_migrated": 1,
+    "honeypot": "basic",
+    "antispam": 0,
+    "show_title": 0,
+    "show_description": 0,
+    "draft_label": "Save Draft",
+    "transition": "",
+    "noindex_files": 0,
+    "pagination_position": "",
+    "landing_layout": "default",
+    "landing_bg_image_id": 0,
+    "landing_opacity": "",
+    "paypal_item_name": "",
+    "paypal_amount_field": "",
+    "paypal_amount": "",
+    "paypal_list": [],
+    "paypal_stop_email": 0,
+    "paypal_type": "",
+    "repeat_num": 1,
+    "repeat_time": "M",
+    "retry": 0,
+    "trial": 0,
+    "trial_amount": "",
+    "trial_num": 1,
+    "trial_time": "M",
+    "change_field": [],
+    "action_id": 0,
+    "business_email": "info@formidable-masterminds.com",
+    "currency": "USD",
+    "return_url": "https://formidable-masterminds.com",
+    "cancel_url": "https://formidable-masterminds.com"
+  },
+  "editable": "0",
+  "created_at": "2009-11-24 00:17:31",
+  "link": "http://localhost/public_html/wp-admin/admin-ajax.php?action=frm_forms_preview&#038;form=contact-form",
+  "_links": {
+    "self": [
+      {
+        "href": "http://localhost/public_html/wp-json/frm/v2/forms/1",
+        "targetHints": {
+          "allow": ["GET"]
+        }
+      }
+    ],
+    "collection": [
+      {
+        "href": "http://localhost/public_html/wp-json/frm/v2/forms"
+      }
+    ],
+    "fields": [
+      {
+        "embeddable": true,
+        "href": "http://localhost/public_html/wp-json/frm/v2/forms/1/fields"
+      }
+    ]
+  }
+}
