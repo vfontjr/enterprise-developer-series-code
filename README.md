@@ -30,7 +30,7 @@ To get notified when new code or companion projects are published, [subscribe to
 
 ## 🤝 Contributing
 
-Pull requests and suggestions are welcome, especially for edge case enhancements or performance improvements. See the `CONTRIBUTING.md` file (coming soon).
+Pull requests and suggestions are welcome, especially for edge case enhancements or performance improvements. See the `CONTRIBUTING.md` file.
 
 ## 📣 Need Help?
 
