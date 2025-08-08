@@ -1,0 +1,10 @@
+﻿Component,Details
+Reusable Renderer Function,"renderFormidableForm(formId, formSchema, fieldSchema, targetSelector)"
+Inputs: Hydrated API Payloads,"formId: number, formSchema: object, fieldSchema: array"
+Form-Level Hidden Fields,"frm_action, form_id, form_key, frm_submit_entry_*, _wp_http_referer, item_key, frm_state"
+Field Types Supported,"text, email, textarea, checkbox, hidden, captcha, submit"
+Validation Attributes,"data-reqmsg, data-invmsg, required, aria-required"
+Accessibility (ARIA),"aria-invalid, aria-describedby, role attributes"
+Conditional Logic Placeholder,Stub included: show/hide logic can be extended per fieldSchema
+Submit Button Logic,Submit button with class 'frm_final_submit'
+Output: DOM Injection,Appends fully rendered <form> inside targetSelector

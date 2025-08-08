@@ -1,0 +1,5 @@
+Field Type,Rendered As,Purpose,Behavior,Notes
+divider,<div> or <fieldset>,Logical grouping; can be collapsible,Toggle visibility of child fields,Use data attributes for toggle targets
+break,<div class='frm_page_break'>,Pagination between steps,Defines step boundaries,Track active step; add nav buttons
+html,Injected innerHTML container,Display static custom content,No interaction; render directly,Sanitize content if untrusted
+summary,<div class='frm_summary'>,Display all captured values,Preview mode before submit,Maps item_meta to readable output
