@@ -1,0 +1,19 @@
+{
+  "name": "formidable-renderer",
+  "version": "1.0.0",
+  "description": "Enterprise-grade rendering engine for headless Formidable Forms using REST API metadata.",
+  "main": "formidable-renderer.js",
+  "author": "Headless WordPress, Formidable Power, 2nd ed.",
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "@wordpress/api-fetch": "^3.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.0.0"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "coverage": "vitest run --coverage"
+  }
+}
