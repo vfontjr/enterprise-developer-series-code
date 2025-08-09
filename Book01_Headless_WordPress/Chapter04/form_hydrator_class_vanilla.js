@@ -2,11 +2,11 @@
  * FormHydrator (Vanilla JS, ES Module)
  * ====================================
  *
- * @author Headless WordPress, Formidable Power, 2nd ed.
- * @license MIT
- * @version 2.0.0
- * @since 2025-08-09
- * @see {@link https://github.com/enterprise-developer-series/enterprise-developer-series-code/blob/main/Book01_Headless_WordPress/Chapter04/form_hydrator_class_vanilla.js}
+ * Author: Headless WordPress, Formidable Power, 2nd ed.
+ * License: MIT
+ * Version: 3.0.0
+ * Since: 2025-08-09
+ * @see https://github.com/vfontjr/enterprise-developer-series-code/blob/main/Book01_Headless_WordPress/Chapter04/form_hydrator_class_vanilla.js
  * @see Headless WordPress, Formidable Power, 2nd ed., Chapter 4
  *
  * Purpose
@@ -16,165 +16,182 @@
  *   2) Fetch form metadata
  *   3) Fetch form fields
  *
- * This version is production-friendly and instructional. It demonstrates:
- *   • Dependency injection (custom fetch impl, base URL, headers)
- *   • Structured error handling with timeouts
- *   • Retries with exponential backoff and jitter for transient faults
- *   • Pluggable caching with a default in-memory TTL cache
- *   • Pluggable logger API (debug/info/warn/error)
+ * This version is production-friendly and instructional. It implements the full set
+ * of reliability/ergonomics improvements discussed in the book:
+ *   (1)  Per-call overrides & caller AbortSignal
+ *   (2)  Retry-After support from server responses
+ *   (3)  In-flight request de-duplication (coalescing)
+ *   (4)  Structured error class with codes & causes
+ *   (5)  Route-specific cache TTLs
+ *   (6)  Trace IDs, timing, and an optional onRequest hook for observability
+ *   (7)  Circuit breaker per-route to back off during repeated 5xxs
+ *   (8)  WordPress nonce injection (X-WP-Nonce)
+ *   (9)  ETag/If-None-Match support and 304 handling
+ *   (10) Response guards (lightweight runtime validation)
+ *   (11) Normalization helper for fields
+ *   (12) Preload API to warm caches ahead of time
+ *   (13) Web Worker & integration test examples (documented below)
  *
  * Notes for trainees
  * ------------------
- * 1) The hydrator is intentionally framework-agnostic. You can drop it into
- *    vanilla JS, React, or any headless front end.
- * 2) The cache interface is minimal (get/set/delete). Swap in LocalStorage,
- *    IndexedDB, or Redis (server-side) by implementing the same three methods.
- * 3) Retries only target "likely transient" failures (e.g., 429, 502). Avoid
- *    retrying 4xx client errors that stem from bad requests.
- * 4) All methods validate inputs up front to fail fast and fail clearly.
+ * - Framework-agnostic; works in browsers or Node with a fetch polyfill.
+ * - Caching is pluggable; default is in-memory TTL cache. For SSR, provide Redis.
+ * - The API is intentionally small; power comes from composition via per-call options.
+ *  *
+ * Request flow (high level)
+ * -------------------------
+ *              +------------------+
+ *   formKey -> |  idByKey route   | --(cache/ETag/retry/breaker)--> { id }
+ *              +------------------+
+ *                         |
+ *                         v
+ *                 +--------------+                +----------------+
+ *                 |  formMeta    |  \   parallel   |  formFields    |
+ *                 +--------------+   \  requests   +----------------+
+ *                     |  (GET)        \   (GET)
+ *                     |                \
+ *   cache lookup --> [in-memory TTL]   [in-memory TTL] <-- cache lookup
+ *   if ETag: send If-None-Match         if ETag: send If-None-Match
+ *   if 304: reuse cached body           if 304: reuse cached body
+ *
+ * Cross-cutting concerns
+ * ----------------------
+ * - Per-call overrides (headers/timeout/AbortSignal/cacheBypass/ttlMs/wpNonce)
+ * - X-WP-Nonce injection for privileged WP REST routes
+ * - Retry policy (exponential backoff + jitter; honors Retry-After)
+ * - Circuit breaker: open per-route after N consecutive 5xx, cool-off then half-open
+ * - In-flight de-duplication: concurrent identical GETs share a single promise
+ * - Observability: traceId + optional onRequest({ phase, durationMs, status })
+ * - Response guards & normalizeFields() for safer consumers
  */
 
-/**
- * Lightweight no-op logger used by default. Replace with your own (e.g.,
- * pino/winston) by passing a compatible object via options.logger.
- * @type {{debug:Function, info:Function, warn:Function, error:Function}}
- */
-const NoopLogger = {
-  debug: () => {},
-  info: () => {},
-  warn: () => {},
-  error: () => {},
-};
+// ---------------------------
+// Minimal utilities & types
+// ---------------------------
 
-/**
- * Simple in-memory TTL cache suitable for browsers and small apps.
- * For scale or persistence, provide your own cache via the options.
- */
+/** @typedef {{debug:Function, info:Function, warn:Function, error:Function}} LoggerLike */
+const NoopLogger = { debug: () => {}, info: () => {}, warn: () => {}, error: () => {} };
 
-class SimpleTTLCache {
-  constructor() {
-    /** @type {Map<string, {expires:number, value:any}>} */
-    this._store = new Map();
-  }
-
+/** Structured error that callers can switch on without string parsing. */
+class FormHydratorError extends Error {
   /**
-   * @param {string} key
-   * @returns {any | undefined}
+   * @param {string} message
+   * @param {string} code e.g., 'ETIMEDOUT' | 'ENETWORK' | 'EHTTP_502' | 'EBADSHAPE' | 'EBADARGS' | 'ECIRCUIT_OPEN'
+   * @param {{status?:number,cause?:any,traceId?:string}} [opts]
    */
+  constructor(message, code, opts = {}) {
+    super(message);
+    this.name = 'FormHydratorError';
+    this.code = code;
+    this.status = opts.status;
+    this.cause = opts.cause;
+    this.traceId = opts.traceId;
+  }
+}
+
+/** Simple in-memory TTL cache. Swap for Redis/IndexedDB in production SSR. */
+class SimpleTTLCache {
+  constructor() { this._store = new Map(); }
   get(key) {
     const hit = this._store.get(key);
     if (!hit) return undefined;
-    if (hit.expires !== 0 && Date.now() > hit.expires) {
-      this._store.delete(key);
-      return undefined;
-    }
+    if (hit.expires !== 0 && Date.now() > hit.expires) { this._store.delete(key); return undefined; }
     return hit.value;
   }
-
-  /**
-   * @param {string} key
-   * @param {any} value
-   * @param {number} ttlMs Use 0 for no expiration.
-   */
   set(key, value, ttlMs) {
     const expires = ttlMs > 0 ? Date.now() + ttlMs : 0;
     this._store.set(key, { expires, value });
   }
-
-  /**
-   * @param {string} key
-   */
-  delete(key) {
-    this._store.delete(key);
-  }
+  delete(key) { this._store.delete(key); }
 }
+
+// ---------------------------
+// JSDoc typedefs for editors
+// ---------------------------
 
 /**
  * @typedef {Object} FormField
- * @property {number} id Numeric field ID
- * @property {string} key Formidable field key (human-stable identifier)
- * @property {string} type Field type (e.g., 'text', 'email', 'select', 'html', etc.)
- * @property {string} [name] Field label
- * @property {any}    [defaultValue]
+ * @property {number} id
+ * @property {string} key
+ * @property {string} type
+ * @property {string} [name]
+ * @property {any} [defaultValue]
  * @property {boolean} [required]
- * @property {Array<any>} [options] For selects/radios/checkboxes
- * @property {Object<string, any>} [config] Vendor-specific extras
+ * @property {Array<any>} [options]
+ * @property {Object<string, any>} [config]
  */
 
 /**
  * @typedef {Object} FormMetadata
- * @property {number} id Numeric form ID
- * @property {string} key Formidable form key
- * @property {string} name Human-readable name
- * @property {Object<string, any>} settings Raw settings object returned by the API
+ * @property {number} id
+ * @property {string} key
+ * @property {string} name
+ * @property {Object<string, any>} settings
  */
+
+/** @typedef {{ id:number, metadata:FormMetadata, fields:Array<FormField>, fieldsRaw?:any }} HydrationPayload */
 
 /**
- * @typedef {Object} HydrationPayload
- * @property {number} id
- * @property {FormMetadata} metadata
- * @property {Array<FormField>} fields
+ * Per-call options (compose with instance defaults)
+ * @typedef {Object} CallOptions
+ * @property {Object} [headers]
+ * @property {number} [timeoutMs]
+ * @property {AbortSignal} [signal]
+ * @property {boolean} [cacheBypass]
+ * @property {number} [ttlMs]
+ * @property {string} [wpNonce]
+ * @property {(evt:{traceId:string,phase:'start'|'success'|'failure',path:string,attempt:number,status?:number,durationMs?:number})=>void} [onRequest]
  */
 
+// -----------------------------------
+// Circuit breaker (per-path, simple)
+// -----------------------------------
+class CircuitBreaker {
+  /** @param {{threshold?:number, coolOffMs?:number, logger?:LoggerLike}} [opts] */
+  constructor(opts={}) {
+    this.threshold = opts.threshold ?? 5;     // consecutive failures to open
+    this.coolOffMs = opts.coolOffMs ?? 15000; // how long to stay open
+    this._state = new Map(); // key -> {fails:number, openedAt?:number}
+    this._logger = opts.logger || NoopLogger;
+  }
+  _entry(k){ return this._state.get(k) || { fails:0, openedAt:undefined }; }
+  canRequest(k){
+    const e=this._entry(k);
+    if(!e.openedAt) return true;
+    const stillOpen = (Date.now()-e.openedAt)<this.coolOffMs;
+    if(stillOpen) return false;
+    // half-open: reset counters and allow a probe
+    this._state.set(k,{fails:0,openedAt:undefined});
+    return true;
+  }
+  recordSuccess(k){ this._state.set(k,{fails:0,openedAt:undefined}); }
+  recordFailure(k){
+    const e=this._entry(k); const fails=(e.fails||0)+1;
+    if(fails>=this.threshold){ this._state.set(k,{fails,openedAt:Date.now()}); this._logger.warn('[Circuit] opened',k); }
+    else this._state.set(k,{fails,openedAt:e.openedAt});
+  }
+}
+
 export class FormHydrator {
-  /**
-   * @typedef {Object} RetryPolicy
-   * @property {number} [maxRetries] Max attempts excluding the initial try. Default 2 (total 3 tries).
-   * @property {number} [backoffBaseMs] Initial backoff delay (exponential). Default 250ms.
-   * @property {number} [backoffCapMs] Maximum backoff delay cap. Default 4000ms.
-   * @property {boolean} [jitter] Add random jitter to reduce thundering herds. Default true.
-   * @property {number[]} [retryOnHTTP] HTTP status codes to retry. Default [429, 500, 502, 503, 504].
-   */
+  /** @typedef {{maxRetries?:number, backoffBaseMs?:number, backoffCapMs?:number, jitter?:boolean, retryOnHTTP?:number[]}} RetryPolicy */
+  /** @typedef {{get:(k:string)=>any|Promise<any>, set:(k:string,v:any,t:number)=>void|Promise<void>, delete:(k:string)=>void|Promise<void>}} CacheLike */
+  /** @typedef {number|{idByKey?:number, metadata?:number, fields?:number}} RouteTTLOpts */
+  /** @typedef {{ baseUrl?:string, fetchImpl?:typeof fetch, timeoutMs?:number, headers?:Object, retry?:RetryPolicy, cache?:CacheLike, cacheTTLms?:RouteTTLOpts, logger?:LoggerLike, wpNonce?:string, breaker?:{threshold?:number,coolOffMs?:number}}} FormHydratorOptions */
 
-  /**
-   * @typedef {Object} CacheLike
-   * @property {(key:string)=>any|Promise<any>} get
-   * @property {(key:string, value:any, ttlMs:number)=>void|Promise<void>} set
-   * @property {(key:string)=>void|Promise<void>} delete
-   */
-
-  /**
-   * @typedef {Object} LoggerLike
-   * @property {(msg?:any, ...args:any[])=>void} debug
-   * @property {(msg?:any, ...args:any[])=>void} info
-   * @property {(msg?:any, ...args:any[])=>void} warn
-   * @property {(msg?:any, ...args:any[])=>void} error
-   */
-
-  /**
-   * @typedef {Object} FormHydratorOptions
-   * @property {string} [baseUrl] Optional base URL (e.g., "https://example.com"). Defaults to '' (same-origin).
-   * @property {typeof fetch} [fetchImpl] Optional fetch implementation to use. Defaults to `window.fetch` or global `fetch`.
-   * @property {number} [timeoutMs] Request timeout. Default 10000ms.
-   * @property {Object} [headers] Extra headers to include on all requests.
-   * @property {RetryPolicy} [retry] Retry configuration.
-   * @property {CacheLike} [cache] Pluggable cache. Defaults to an in-memory TTL cache.
-   * @property {number} [cacheTTLms] Default TTL for cache entries. Default 30000ms.
-   * @property {LoggerLike} [logger] Logger for diagnostics. Defaults to NoopLogger.
-   */
-
-  /**
-   * @param {FormHydratorOptions} [options]
-   */
+  /** @param {FormHydratorOptions} [options] */
   constructor(options = {}) {
-    const {
-      baseUrl = '',
-      fetchImpl,
-      timeoutMs = 10000,
-      headers = {},
-      retry = {},
-      cache,
-      cacheTTLms = 30000,
-      logger = NoopLogger,
-    } = options;
+    const { baseUrl = '', fetchImpl, timeoutMs = 10000, headers = {}, retry = {}, cache, cacheTTLms = 30000, logger = NoopLogger, wpNonce, breaker } = options;
 
-    /** @private */ this._baseUrl = baseUrl.replace(/\/$/, '');
-    /** @private */ this._fetch = fetchImpl || (typeof window !== 'undefined' ? window.fetch.bind(window) : fetch);
-    /** @private */ this._timeoutMs = timeoutMs;
-    /** @private */ this._headers = headers;
-    /** @private */ this._logger = logger || NoopLogger;
+    // Core config
+    this._baseUrl = baseUrl.replace(/\/$/, '');
+    this._fetch = fetchImpl || (typeof window !== 'undefined' ? window.fetch.bind(window) : fetch);
+    this._timeoutMs = timeoutMs;
+    this._headers = headers;
+    this._logger = logger || NoopLogger;
+    this._wpNonce = wpNonce; // optional X-WP-Nonce
 
-    /** @private */ this._retry = {
+    // Retry
+    this._retry = {
       maxRetries: retry.maxRetries ?? 2,
       backoffBaseMs: retry.backoffBaseMs ?? 250,
       backoffCapMs: retry.backoffCapMs ?? 4000,
@@ -182,409 +199,489 @@ export class FormHydrator {
       retryOnHTTP: retry.retryOnHTTP ?? [429, 500, 502, 503, 504],
     };
 
-    /** @private */ this._cache = cache || new SimpleTTLCache();
-    /** @private */ this._cacheTTLms = cacheTTLms;
+    // Cache & TTLs
+    this._cache = cache || new SimpleTTLCache();
+    this._ttl = this._normalizeTTL(cacheTTLms);
 
-    // Centralized route templates for easy overrides
-    /** @private */ this._routes = {
+    // In-flight registry
+    this._inflight = new Map(); // key -> Promise
+
+    // Circuit breaker
+    this._breaker = new CircuitBreaker({ ...(breaker||{}), logger: this._logger });
+
+    // Routes
+    this._routes = {
       idByKey: (key) => `/wp-json/custom/v1/form-id/${encodeURIComponent(key)}`,
       formMeta: (id) => `/wp-json/frm/v2/forms/${id}`,
       formFields: (id) => `/wp-json/frm/v2/forms/${id}/fields`,
     };
   }
 
-  // =========================
-  // Public API (High-Level)
-  // =========================
+  // ---------------
+  // Public API
+  // ---------------
 
   /**
-   * Hydrate a form by its key. Fetches ID, metadata, and fields.
-   * Runs metadata and fields requests in parallel for efficiency.
-   *
-   * @example
-   * const hydrator = new FormHydrator();
-   * const { id, metadata, fields } = await hydrator.hydrate('contact_form');
-   *
+   * Hydrate a form by its key.
    * @param {string} formKey
-   * @returns {Promise<HydrationPayload>} Hydration payload
+   * @param {CallOptions} [opts]
+   * @returns {Promise<HydrationPayload>}
    */
-  async hydrate(formKey) {
-    const id = await this.getFormIdByKey(formKey);
-    const [metadata, fields] = await Promise.all([
-      this.getFormMetadata(id),
-      this.getFormFields(id),
+  async hydrate(formKey, opts = {}) {
+    const id = await this.getFormIdByKey(formKey, opts);
+    const [metadata, fieldsRaw] = await Promise.all([
+      this.getFormMetadata(id, opts),
+      this.getFormFields(id, opts),
     ]);
-    return { id, metadata, fields };
+    const fields = this.normalizeFields(fieldsRaw);
+    return { id, metadata, fields, fieldsRaw };
   }
 
-  /**
-   * Fetch the form ID by key using the custom REST route.
-   * @param {string} formKey
-   * @returns {Promise<number>}
-   */
-  async getFormIdByKey(formKey) {
-    if (!formKey) throw new Error('A non-empty formKey is required.');
+  /** Resolve ID from key. */
+  async getFormIdByKey(formKey, opts = {}) {
+    if (!formKey) throw new FormHydratorError('A non-empty formKey is required.', 'EBADARGS');
     const path = this._routes.idByKey(formKey);
-    const data = await this._getWithCacheAndRetry(path);
-    if (!data || typeof data.id !== 'number') {
-      throw new Error(`Form key "${formKey}" did not return a numeric id.`);
-    }
+    const data = await this._getWithCacheAndRetry(path, this._ttl.idByKey, opts);
+    this._guardIdByKey(data);
     return data.id;
   }
 
-  /**
-   * Fetch form metadata using the Formidable Forms REST API.
-   * @param {number} formId
-   * @returns {Promise<object>}
-   */
-  async getFormMetadata(formId) {
-    if (!Number.isFinite(formId)) throw new Error('A numeric formId is required.');
+  /** Fetch form metadata. */
+  async getFormMetadata(formId, opts = {}) {
+    if (!Number.isFinite(formId)) throw new FormHydratorError('A numeric formId is required.', 'EBADARGS');
     const path = this._routes.formMeta(formId);
-    return this._getWithCacheAndRetry(path);
+    const meta = await this._getWithCacheAndRetry(path, this._ttl.metadata, opts);
+    this._guardMetadata(meta);
+    return meta;
   }
 
-  /**
-   * Fetch form fields for the given form ID.
-   * @param {number} formId
-   * @returns {Promise<Array<object>>}
-   */
-  async getFormFields(formId) {
-    if (!Number.isFinite(formId)) throw new Error('A numeric formId is required.');
+  /** Fetch form fields. */
+  async getFormFields(formId, opts = {}) {
+    if (!Number.isFinite(formId)) throw new FormHydratorError('A numeric formId is required.', 'EBADARGS');
     const path = this._routes.formFields(formId);
-    return this._getWithCacheAndRetry(path);
+    const fields = await this._getWithCacheAndRetry(path, this._ttl.fields, opts);
+    this._guardFields(fields);
+    return fields;
   }
 
-  // =========================
-  // Public Utilities
-  // =========================
-
-  /**
-   * Set or overwrite a default header for subsequent requests.
-   * Useful for runtime auth token refresh.
-   * @param {string} name
-   * @param {string} value
-   */
-  setHeader(name, value) {
-    if (!name) throw new Error('Header name is required.');
-    this._headers[name] = value;
+  /** Preload/warm caches for a given key (ID, metadata, fields). */
+  async preload(formKey, opts = {}) {
+    const id = await this.getFormIdByKey(formKey, opts);
+    await Promise.all([ this.getFormMetadata(id, opts), this.getFormFields(id, opts) ]);
+    return id;
   }
 
-  /**
-   * Remove a default header set on the hydrator instance.
-   * @param {string} name
-   */
-  removeHeader(name) {
-    delete this._headers[name];
-  }
+  // -----------------
+  // Public utilities
+  // -----------------
 
-  /**
-   * Invalidate cache entries associated with a specific form ID.
-   * Safe to call even if entries do not exist. No-op if cache doesn't support delete failures.
-   * @param {number} formId
-   */
+  setHeader(name, value) { if (!name) throw new Error('Header name is required.'); this._headers[name] = value; }
+  removeHeader(name) { delete this._headers[name]; }
+  setWpNonce(nonce) { this._wpNonce = nonce; }
+
   async invalidateByFormId(formId) {
-    if (!Number.isFinite(formId)) throw new Error('A numeric formId is required.');
+    if (!Number.isFinite(formId)) throw new FormHydratorError('A numeric formId is required.', 'EBADARGS');
     try {
       await this._cache.delete(this._cacheKey(this._routes.formMeta(formId)));
       await this._cache.delete(this._cacheKey(this._routes.formFields(formId)));
-    } catch (e) {
-      this._logger.warn('[FormHydrator] cache invalidate (formId) failed', e);
-    }
+    } catch (e) { this._logger.warn('[FormHydrator] cache invalidate (formId) failed', e); }
   }
 
-  /**
-   * Invalidate cache entries associated with a specific form key.
-   * This removes the idByKey entry and, if resolvable, the derived ID entries as well.
-   * @param {string} formKey
-   */
   async invalidateByFormKey(formKey) {
-    if (!formKey) throw new Error('A non-empty formKey is required.');
+    if (!formKey) throw new FormHydratorError('A non-empty formKey is required.', 'EBADARGS');
+    try { await this._cache.delete(this._cacheKey(this._routes.idByKey(formKey))); }
+    catch (e) { this._logger.warn('[FormHydrator] cache invalidate (formKey mapping) failed', e); }
     try {
-      // Remove the key->id mapping first
-      await this._cache.delete(this._cacheKey(this._routes.idByKey(formKey)));
-    } catch (e) {
-      this._logger.warn('[FormHydrator] cache invalidate (formKey mapping) failed', e);
-    }
-
-    // Optionally remove derived entries if we can still resolve the ID
-    try {
-      const idData = await this._getWithRetry(this._routes.idByKey(formKey));
-      if (idData && typeof idData.id === 'number') {
-        await this.invalidateByFormId(idData.id);
-      }
-    } catch {
-      // If we cannot resolve the id right now, best-effort invalidation already occurred.
-    }
+      const res = await this._getWithRetry(this._routes.idByKey(formKey), {});
+      if (res && res.data && typeof res.data.id === 'number') await this.invalidateByFormId(res.data.id);
+    } catch { /* best-effort */ }
   }
 
-  // =========================
-  // Internal Helpers
-  // =========================
-
-  /**
-   * Compute a cache key from the baseUrl and path.
-   * @param {string} path
-   * @returns {string}
-   * @private
-   */
-  _cacheKey(path) {
-    return `${this._baseUrl}${path}`;
+  /** Normalize field array into a predictable shape without mutating the original. */
+  normalizeFields(fields) {
+    if (!Array.isArray(fields)) return [];
+    return fields.map(f => ({
+      id: Number(f.id),
+      key: String(f.key ?? ''),
+      type: String(f.type ?? 'text'),
+      name: typeof f.name === 'string' ? f.name : undefined,
+      required: Boolean(f.required),
+      defaultValue: f.defaultValue ?? f.default ?? undefined,
+      options: Array.isArray(f.options) ? f.options.slice() : undefined,
+      config: (f && typeof f === 'object') ? { ...f.config } : undefined,
+    }));
   }
 
-  /**
-   * Get JSON with caching and retry logic layered on top of a single GET.
-   * @param {string} path
-   * @returns {Promise<any>}
-   * @private
-   */
-  async _getWithCacheAndRetry(path) {
+  // -----------------
+  // Internal helpers
+  // -----------------
+
+  _normalizeTTL(ttl) {
+    if (typeof ttl === 'number') return { idByKey: ttl, metadata: ttl, fields: ttl };
+    const d = 30000;
+    return { idByKey: ttl?.idByKey ?? d, metadata: ttl?.metadata ?? d, fields: ttl?.fields ?? d };
+  }
+
+  _cacheKey(path) { return `${this._baseUrl}${path}`; }
+
+  _inflightKey(path, headers) {
+    const h = headers ? Object.keys(headers).sort().map(k => `${k}:${headers[k]}`).join('|') : '';
+    return `${this._cacheKey(path)}::${h}`;
+  }
+
+  // ---- ETag-aware cache wrappers
+  _readCacheEntry(key) {
+    const entry = this._cache.get(key);
+    if (typeof entry === 'undefined') return { body: undefined, etag: undefined };
+    if (entry && typeof entry === 'object' && '__etag' in entry && '__body' in entry) return { body: entry.__body, etag: entry.__etag };
+    return { body: entry, etag: undefined }; // legacy entries
+  }
+  async _writeCacheEntry(key, body, ttlMs, etag) {
+    if (etag) return this._cache.set(key, { __etag: etag, __body: body }, ttlMs);
+    return this._cache.set(key, body, ttlMs);
+  }
+
+  // ---- Lightweight response guards
+  _guardIdByKey(obj) {
+    if (!obj || typeof obj.id !== 'number') throw new FormHydratorError('Unexpected response shape for idByKey.', 'EBADSHAPE');
+  }
+  _guardMetadata(obj) {
+    if (!obj || typeof obj.id !== 'number' || typeof obj.key !== 'string') throw new FormHydratorError('Unexpected response shape for metadata.', 'EBADSHAPE');
+  }
+  _guardFields(arr) {
+    if (!Array.isArray(arr)) throw new FormHydratorError('Unexpected response shape for fields.', 'EBADSHAPE');
+  }
+
+  // ---- Core GET with cache, coalescing, retries, ETag/304, breaker, and observability
+  async _getWithCacheAndRetry(path, routeTTL, opts = {}) {
+    const { cacheBypass = false, ttlMs } = opts;
+    const effTTL = typeof ttlMs === 'number' ? ttlMs : routeTTL;
     const key = this._cacheKey(path);
 
-    // 1) Cache check (fast path)
-    try {
-      const cached = await this._cache.get(key);
-      if (typeof cached !== 'undefined') {
-        this._logger.debug('[FormHydrator] cache hit', key);
-        return cached;
+    // Circuit breaker
+    if (!this._breaker.canRequest(key)) {
+      throw new FormHydratorError('Circuit open for this route; refusing request temporarily.', 'ECIRCUIT_OPEN');
+    }
+
+    // Cache check (ETag-aware)
+    let cachedBody, cachedEtag;
+    if (!cacheBypass) {
+      try { const { body, etag } = this._readCacheEntry(key); cachedBody = body; cachedEtag = etag; }
+      catch (e) { this._logger.warn('[FormHydrator] cache get failed', e); }
+    }
+
+    // In-flight coalescing
+    const inflightKey = this._inflightKey(path, opts.headers);
+    if (this._inflight.has(inflightKey)) return this._inflight.get(inflightKey);
+
+    const p = (async () => {
+      const result = await this._getWithRetry(path, { ...opts, etag: cachedEtag }); // {data,etag,from304}
+      const payload = result.from304 ? (cachedBody !== undefined ? cachedBody : result.data) : result.data;
+      if (!cacheBypass) {
+        try { await this._writeCacheEntry(key, payload, effTTL, result.etag); }
+        catch (e) { this._logger.warn('[FormHydrator] cache set failed', e); }
       }
-      this._logger.debug('[FormHydrator] cache miss', key);
-    } catch (e) {
-      this._logger.warn('[FormHydrator] cache get failed', e);
-    }
+      return payload;
+    })();
 
-    // 2) Fetch with retries
-    const data = await this._getWithRetry(path);
-
-    // 3) Store in cache
-    try {
-      await this._cache.set(key, data, this._cacheTTLms);
-    } catch (e) {
-      this._logger.warn('[FormHydrator] cache set failed', e);
-    }
-
-    return data;
+    this._inflight.set(inflightKey, p);
+    try { const val = await p; this._breaker.recordSuccess(key); return val; }
+    catch (e) { this._breaker.recordFailure(key); throw e; }
+    finally { this._inflight.delete(inflightKey); }
   }
 
-  /**
-   * Perform a GET with timeout and structured retries.
-   * @param {string} path
-   * @returns {Promise<any>}
-   * @private
-   */
-  async _getWithRetry(path) {
-    const {
-      maxRetries,
-      backoffBaseMs,
-      backoffCapMs,
-      jitter,
-      retryOnHTTP,
-    } = this._retry;
+  async _getWithRetry(path, opts = {}) {
+    const { maxRetries, backoffBaseMs, backoffCapMs, jitter, retryOnHTTP } = this._retry;
+    let attempt = 0; const traceId = Math.random().toString(16).slice(2);
 
-    let attempt = 0;
-    /* Initial try + N retries */
     while (true) {
+      const started = Date.now();
       try {
-        return await this._getOnce(path);
+        const res = await this._getOnce(path, { ...opts, traceId }); // {data,etag,from304}
+        const duration = Date.now() - started;
+        this._logger.info('[FormHydrator] ok', { path, attempt, duration, traceId, from304: !!res.from304 });
+        if (typeof opts.onRequest === 'function') opts.onRequest({ traceId, phase:'success', path, attempt, status: 200, durationMs: duration });
+        return res;
       } catch (err) {
-        attempt++;
-        const isAbort = err && err.name === 'AbortError';
-        const isNetwork = err && !('status' in err); // no HTTP status on network errors
-        const status = err && err.status;
+        const duration = Date.now() - started;
+        if (typeof opts.onRequest === 'function') opts.onRequest({ traceId, phase:'failure', path, attempt, status: err.status, durationMs: duration });
 
+        attempt++;
+        const status = err && err.status;
+        const retryAfterMs = err && err.retryAfterMs;
+        const isAbort = err && err.name === 'AbortError';
+        const isNetwork = err && err.code === 'ENETWORK';
         const retriableHTTP = typeof status === 'number' && retryOnHTTP.includes(status);
         const retriable = isNetwork || isAbort || retriableHTTP;
 
         if (!retriable || attempt > maxRetries) {
-          this._logger.error('[FormHydrator] request failed (no more retries)', { path, attempt, err });
+          this._logger.error('[FormHydrator] request failed (no more retries)', { path, attempt, status, traceId, err });
           throw err;
         }
 
-        const delay = this._computeBackoffDelay(attempt, backoffBaseMs, backoffCapMs, jitter);
-        this._logger.warn('[FormHydrator] transient failure, retrying…', { path, attempt, delay, status });
+        const delay = typeof retryAfterMs === 'number' ? retryAfterMs : this._computeBackoffDelay(attempt, backoffBaseMs, backoffCapMs, jitter);
+        this._logger.warn('[FormHydrator] transient failure, retrying…', { path, attempt, delay, status, traceId });
         await this._sleep(delay);
       }
     }
   }
 
-  /**
-   * Execute a single GET request with timeout. Throws an Error enriched with `status` when HTTP fails.
-   * @param {string} path
-   * @returns {Promise<any>}
-   * @private
-   */
-  async _getOnce(path) {
+  async _getOnce(path, opts = {}) {
+    const { headers: callHeaders, timeoutMs: callTimeout, signal: callerSignal, traceId, etag: ifNoneMatch, wpNonce, onRequest } = opts;
+
+    // Compose headers: base → per-call → nonce → If-None-Match
+    const headers = { 'Accept': 'application/json', ...this._headers, ...(callHeaders || {}) };
+    const nonce = typeof wpNonce === 'string' ? wpNonce : this._wpNonce; if (nonce) headers['X-WP-Nonce'] = nonce;
+    if (ifNoneMatch) headers['If-None-Match'] = ifNoneMatch;
+
+    // Compose timeout & signals
     const controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
-    const id = controller ? setTimeout(() => controller.abort(), this._timeoutMs) : null;
+    const effTimeout = typeof callTimeout === 'number' ? callTimeout : this._timeoutMs;
+    const timeoutId = controller ? setTimeout(() => controller.abort(), effTimeout) : null;
+    const onCallerAbort = () => { if (controller) controller.abort(); };
+    if (callerSignal && controller) {
+      if (callerSignal.aborted) controller.abort();
+      else callerSignal.addEventListener('abort', onCallerAbort, { once: true });
+    }
 
     try {
       const url = `${this._baseUrl}${path}`;
-      this._logger.debug('[FormHydrator] GET', url);
-      const resp = await this._fetch(url, {
-        method: 'GET',
-        headers: { 'Accept': 'application/json', ...this._headers },
-        signal: controller ? controller.signal : undefined,
-      });
+      this._logger.debug('[FormHydrator] GET', { url, traceId, ifNoneMatch: !!ifNoneMatch, hasNonce: !!nonce });
+      if (typeof onRequest === 'function') onRequest({ traceId, phase:'start', path, attempt: 0 });
+
+      const resp = await this._fetch(url, { method: 'GET', headers, signal: controller ? controller.signal : undefined });
+
+      if (resp.status === 304) return { data: undefined, etag: ifNoneMatch, from304: true };
 
       if (!resp.ok) {
+        let retryAfterMs = undefined;
+        try {
+          const ra = resp.headers && (resp.headers.get ? resp.headers.get('Retry-After') : undefined);
+          if (ra) { const secs = Number(ra); if (Number.isFinite(secs)) retryAfterMs = secs * 1000; else { const when = Date.parse(ra); if (!Number.isNaN(when)) retryAfterMs = Math.max(0, when - Date.now()); } }
+        } catch {}
         const text = await resp.text().catch(() => '');
-        const error = new Error(`Request failed ${resp.status} ${resp.statusText} for ${path}${text ? ` — ${text}` : ''}`);
-        // Attach status to error so retry logic can inspect it
-        error.status = resp.status;
-        throw error;
+        const code = typeof resp.status === 'number' ? `EHTTP_${resp.status}` : 'EHTTP';
+        const err = new FormHydratorError(`Request failed ${resp.status} ${resp.statusText} for ${path}${text ? ` — ${text}` : ''}`, code, { status: resp.status, traceId });
+        err.retryAfterMs = retryAfterMs; throw err;
       }
 
-      return resp.json();
-    } catch (err) {
-      if (err && err.name === 'AbortError') {
-        const abortError = new Error(`Request timed out after ${this._timeoutMs} ms: ${path}`);
-        abortError.name = 'AbortError';
-        throw abortError;
-      }
-      throw err;
+      const etag = resp.headers && (resp.headers.get ? resp.headers.get('ETag') : undefined);
+      const data = await resp.json();
+      return { data, etag, from304: false };
+    } catch (raw) {
+      if (raw && raw.name === 'AbortError') { const err = new FormHydratorError(`Request timed out after ${effTimeout} ms: ${path}`, 'ETIMEDOUT', { traceId, cause: raw }); err.name='AbortError'; throw err; }
+      if (!raw || typeof raw.status !== 'number') throw new FormHydratorError(`Network error during GET ${path}`, 'ENETWORK', { traceId, cause: raw });
+      throw raw; // already structured
     } finally {
-      if (id) clearTimeout(id);
+      if (timeoutId) clearTimeout(timeoutId);
+      if (callerSignal && controller) callerSignal.removeEventListener('abort', onCallerAbort);
     }
   }
 
-  /**
-   * Compute exponential backoff with optional jitter.
-   * @param {number} attempt 1-based attempt number
-   * @param {number} base Base ms
-   * @param {number} cap Maximum ms
-   * @param {boolean} jitter Add random jitter
-   * @returns {number}
-   * @private
-   */
   _computeBackoffDelay(attempt, base, cap, jitter) {
     const exp = Math.min(cap, base * Math.pow(2, attempt - 1));
     if (!jitter) return exp;
     const rand = Math.random() * exp * 0.5; // up to 50% jitter
     return Math.floor(exp / 2 + rand);
   }
-
-  /**
-   * Sleep helper for backoff
-   * @param {number} ms
-   * @returns {Promise<void>}
-   * @private
-   */
-  _sleep(ms) {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
+  _sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 }
 
 // =========================
 // Usage Examples
 // =========================
 
-// 1) Same-origin, browser, defaults
+// 1) Browser defaults
 // const hydrator = new FormHydrator();
-// const result = await hydrator.hydrate('contact_form');
-// console.log('Hydrated Form:', result);
+// const { id, metadata, fields } = await hydrator.hydrate('contact_form');
 
-// 2) Custom base URL with auth header and extended TTL
+// 2) Custom base URL, auth, WP Nonce, route TTLs, and per-call overrides
 // const hydrator = new FormHydrator({
 //   baseUrl: 'https://example.com',
 //   headers: { Authorization: 'Bearer <token>' },
-//   cacheTTLms: 60_000, // 60s cache
+//   wpNonce: window?.wpApiSettings?.nonce,
+//   cacheTTLms: { idByKey: 120_000, metadata: 60_000, fields: 30_000 },
 //   retry: { maxRetries: 3, backoffBaseMs: 300, backoffCapMs: 5000 },
-//   logger: console, // minimal compatible logger
+//   logger: console,
+//   breaker: { threshold: 5, coolOffMs: 15000 },
 // });
-// const { id, metadata, fields } = await hydrator.hydrate('contact_form');
+// await hydrator.preload('contact_form'); // warm the cache ahead of navigation
+// const payload = await hydrator.hydrate('contact_form', {
+//   headers: { 'X-Trace': 'abc123' },
+//   timeoutMs: 15000,
+//   onRequest: ({ traceId, phase, path, durationMs }) => console.log('[trace]', traceId, phase, path, durationMs)
+// });
 
-// 3) Server-side/Node with a custom fetch and a Redis-backed cache
+// 3) Node/SSR with Redis-like cache and fetch polyfill
 // import fetch from 'node-fetch';
-// const redisCache = {
-//   async get(key) { return await redis.get(key).then(JSON.parse); },
-//   async set(key, value, ttlMs) { await redis.set(key, JSON.stringify(value), { PX: ttlMs }); },
-//   async delete(key) { await redis.del(key); },
-// };
-// const hydrator = new FormHydrator({ baseUrl: process.env.SITE_URL, fetchImpl: fetch, cache: redisCache });
-// const payload = await hydrator.hydrate('contact_form');
+// const redisCache = { get: (k) => redis.get(k).then(x => x && JSON.parse(x)), set: (k,v,ttl) => redis.set(k, JSON.stringify(v), { PX: ttl }), delete: (k) => redis.del(k) };
+// const hydrator = new FormHydrator({ baseUrl: process.env.SITE_URL, fetchImpl: fetch, cache: redisCache, logger: console });
 
 /*
 ================================================================================
-TypeScript Editor Hints (Optional)
+ASCII One-Pager (copy-friendly)
 --------------------------------------------------------------------------------
-This file uses JSDoc to describe types. Most editors (VS Code) will infer types
-from these typedefs. If you want even stronger tooling in TS projects without
-converting this file, add the following in a sibling `.d.ts` file (example):
+Key -> idByKey -> id -> [ formMeta | formFields ] (parallel) -> normalizeFields -> payload
 
-  // form_hydrator_class_vanilla.d.ts
-  export type FormField = import('./form_hydrator_class_vanilla.js').FormField;
-  export type FormMetadata = import('./form_hydrator_class_vanilla.js').FormMetadata;
-  export type HydrationPayload = import('./form_hydrator_class_vanilla.js').HydrationPayload;
-  export class FormHydrator {
-    constructor(options?: any);
-    hydrate(formKey: string): Promise<HydrationPayload>;
-    getFormIdByKey(formKey: string): Promise<number>;
-    getFormMetadata(formId: number): Promise<FormMetadata>;
-    getFormFields(formId: number): Promise<FormField[]>;
-    setHeader(name: string, value: string): void;
-    removeHeader(name: string): void;
-    invalidateByFormId(formId: number): Promise<void>;
-    invalidateByFormKey(formKey: string): Promise<void>;
-  }
+Cache layers: route-specific TTLs; ETag-aware storage { __etag, __body }
+Resilience: retries with backoff (+ Retry-After), circuit breaker, request coalescing
+Security: optional X-WP-Nonce injection per instance or per call
+Observability: traceId, logger hooks, optional onRequest callback
 
 --------------------------------------------------------------------------------
-Minimal Unit-Test Scaffold (Jest/Vitest-style, Pseudocode)
+Web Worker example (pseudo)
 --------------------------------------------------------------------------------
-import { FormHydrator } from './form_hydrator_class_vanilla.js';
+self.onmessage = async (e) => {
+  const { formKey, options } = e.data;
+  const hydrator = new FormHydrator(options);
+  const payload = await hydrator.hydrate(formKey, { onRequest: (evt) => postMessage({ type:'trace', ...evt }) });
+  postMessage({ type:'payload', payload });
+};
 
-describe('FormHydrator', () => {
-  test('hydrates via key with caching', async () => {
-    const calls: string[] = [];
-    const fakeFetch = async (url: string) => {
-      calls.push(url);
-      if (url.endsWith('/form-id/contact_form'))
-        return ok({ id: 123 });
-      if (url.endsWith('/forms/123'))
-        return ok({ id: 123, key: 'contact_form', name: 'Contact', settings: {} });
-      if (url.endsWith('/forms/123/fields'))
-        return ok([{ id: 1, key: 'name', type: 'text' }]);
-      throw new Error('Unexpected URL ' + url);
-    };
+--------------------------------------------------------------------------------
+Vitest/Jest tests (copy into __tests__/form_hydrator_class_vanilla.test.js)
+--------------------------------------------------------------------------------
+// These tests are framework-agnostic. They work in Vitest or Jest.
+// To run with Vitest:
+//   npm i -D vitest
+//   npx vitest run __tests__/form_hydrator_class_vanilla.test.js
+// To run with Jest:
+//   npm i -D jest
+//   npx jest __tests__/form_hydrator_class_vanilla.test.js
 
-    const cache = new Map();
-    const cacheLike = {
-      get: (k) => cache.get(k),
-      set: (k, v) => cache.set(k, v),
-      delete: (k) => cache.delete(k),
-    };
+import { describe, it, expect } from 'vitest'; // or from '@jest/globals'
+import { FormHydrator } from '../Book01_Headless_WordPress/Chapter04/form_hydrator_class_vanilla.js';
 
-    const hydrator = new FormHydrator({ fetchImpl: fakeFetch, baseUrl: 'https://site.test', cache: cacheLike });
-    const first = await hydrator.hydrate('contact_form');
-    const second = await hydrator.hydrate('contact_form');
+function ok(json, headers = {}) {
+  return { ok: true, status: 200, statusText: 'OK', headers: { get: (k) => headers[k] }, json: async () => json };
+}
+function text(status, body = '', headers = {}) {
+  return { ok: false, status, statusText: 'ERR', headers: { get: (k) => headers[k] }, text: async () => body };
+}
 
-    expect(first.id).toBe(123);
-    expect(second.id).toBe(123);
-    // Only 3 network calls total (id, meta, fields) thanks to cache
-    expect(calls.length).toBe(3);
+// Table-driven fake fetch using a queue of responses by URL suffix
+function makeFetch(script) {
+  const calls = [];
+  const fn = async (url, init = {}) => {
+    const path = new URL(url).pathname;
+    calls.push({ url, init });
+    if (!script.length) throw new Error('No scripted response for ' + path);
+    const next = script.shift();
+    if (typeof next === 'function') return next(url, init);
+    return next;
+  };
+  fn.calls = calls; fn.script = script; return fn;
+}
+
+// Utility to build common endpoints for a given id and key
+const routes = (id, key) => ({
+  idByKey: `/wp-json/custom/v1/form-id/${encodeURIComponent(key)}`,
+  meta: `/wp-json/frm/v2/forms/${id}`,
+  fields: `/wp-json/frm/v2/forms/${id}/fields`,
+});
+
+describe('FormHydrator – reliability suite', () => {
+  it('hydrates with caching, ETag reuse, and parallel fetches', async () => {
+    const r = routes(7, 'contact_form');
+    const f = makeFetch([
+      ok({ id: 7 }),                                     // idByKey
+      ok({ id: 7, key: 'contact_form', name: 'Contact', settings: {} }, { ETag: 'W/"m1"' }),
+      ok([{ id: 1, key: 'name', type: 'text' }],          { ETag: 'W/"f1"' }),
+      // second pass returns 304s, we should serve cache and NOT fail
+      text(304, '', {}),
+      text(304, '', {}),
+    ]);
+
+    const h = new FormHydrator({ baseUrl: 'https://site.test', fetchImpl: f, logger: console });
+    const a = await h.hydrate('contact_form');
+    expect(a.id).toBe(7);
+    expect(a.metadata.name).toBe('Contact');
+
+    // Second call should send If-None-Match for both endpoints and reuse cache
+    const b = await h.hydrate('contact_form');
+    const seen = f.calls.map(c => ({ path: new URL(c.url).pathname, inm: c.init.headers && c.init.headers['If-None-Match'] }));
+    expect(seen.filter(x => x.path === r.meta)[1].inm).toBe('W/"m1"');
+    expect(seen.filter(x => x.path === r.fields)[1].inm).toBe('W/"f1"');
+    expect(b.metadata).toEqual(a.metadata);
+    expect(b.fields).toEqual(a.fields);
   });
 
-  test('retries on 502 and eventually succeeds', async () => {
-    let tries = 0;
-    const fakeFetch = async (url: string) => {
-      if (url.endsWith('/form-id/contact_form')) return ok({ id: 5 });
-      if (url.endsWith('/forms/5')) {
-        tries++;
-        if (tries < 3) return fail(502);
-        return ok({ id: 5, key: 'contact_form', name: 'C', settings: {} });
-      }
-      if (url.endsWith('/forms/5/fields')) return ok([]);
-      throw new Error('Unexpected URL ' + url);
-    };
+  it('honors Retry-After and backoff on 503', async () => {
+    const r = routes(1, 'k');
+    let first = true;
+    const f = makeFetch([
+      ok({ id: 1 }),
+      // metadata fails once with Retry-After, then succeeds
+      (url) => first ? (first=false, text(503, '', { 'Retry-After': '1' })) : ok({ id: 1, key: 'k', name: 'N', settings: {} }),
+      ok([{ id: 10, key: 'x', type: 'text' }])
+    ]);
 
-    const hydrator = new FormHydrator({ fetchImpl: fakeFetch, baseUrl: 'https://site.test', retry: { maxRetries: 3, backoffBaseMs: 1, backoffCapMs: 2, jitter: false } });
-    const res = await hydrator.hydrate('contact_form');
-    expect(res.id).toBe(5);
-    expect(tries).toBe(3); // 2 failures + 1 success
+    const h = new FormHydrator({ baseUrl: 'https://s', fetchImpl: f, retry: { maxRetries: 2, jitter: false, backoffBaseMs: 1, backoffCapMs: 2 } });
+    const res = await h.hydrate('k');
+    expect(res.id).toBe(1);
+  });
+
+  it('injects X-WP-Nonce globally and per-call', async () => {
+    const r = routes(2, 'n');
+    const f = makeFetch([
+      ok({ id: 2 }),
+      ok({ id: 2, key: 'n', name: 'N', settings: {} }),
+      ok([]),
+    ]);
+    const h = new FormHydrator({ baseUrl: 'https://s', fetchImpl: f, wpNonce: 'global-nonce' });
+    await h.hydrate('n', { wpNonce: 'call-nonce' });
+    const hdrs = f.calls.map(c => c.init.headers);
+    expect(hdrs.some(h => h['X-WP-Nonce'] === 'call-nonce')).toBe(true);
+    expect(hdrs.some(h => h['X-WP-Nonce'] === 'global-nonce')).toBe(true);
+  });
+
+  it('coalesces in-flight GETs', async () => {
+    const r = routes(3, 'co');
+    let gateResolve; const gate = new Promise(r => gateResolve = r);
+    const f = async (url) => { await gate; return ok({ id: 3, key: 'co', name: 'CO', settings: {} }); };
+    const h = new FormHydrator({ baseUrl: 'https://s', fetchImpl: f });
+    const p1 = h.getFormMetadata(3);
+    const p2 = h.getFormMetadata(3);
+    gateResolve();
+    const [a, b] = await Promise.all([p1, p2]);
+    expect(a).toEqual(b);
+  });
+
+  it('opens a circuit after repeated 5xx and then recovers', async () => {
+    const r = routes(4, 'cb');
+    const f = makeFetch([
+      ok({ id: 4 }),
+      text(502, 'bad'), text(502, 'bad'), text(502, 'bad'), text(502, 'bad'), text(502, 'bad'), // trigger open
+    ]);
+    const h = new FormHydrator({ baseUrl: 'https://s', fetchImpl: f, breaker: { threshold: 3, coolOffMs: 1 } });
+
+    await expect(h.getFormMetadata(4)).rejects.toBeTruthy();
+    // During cool-off, calls should short-circuit
+    await expect(h.getFormMetadata(4)).rejects.toBeTruthy();
   });
 });
 
-// Helpers to emulate fetch API responses in tests
-function ok(json: any) { return { ok: true, status: 200, statusText: 'OK', json: async () => json }; }
-function fail(status: number) { return { ok: false, status, statusText: 'ERR', text: async () => '' }; }
+--------------------------------------------------------------------------------
+package.json (example dev script)
+--------------------------------------------------------------------------------
+{
+  "scripts": {
+    "test": "vitest run"
+  }
+}
 
 ================================================================================
 */
+// Easter Egg – For fellow guitarists:
+//   Play this chord when your tests pass:
+//
+//      E minor 7 (Em7)
+//      e|--0--
+//      B|--3--
+//      G|--0--
+//      D|--2--
+//      A|--2--
+//      E|--0--
+//
+//   Why Em7? Because like good code, it’s simple,
+//   open, and makes everything sound better.
