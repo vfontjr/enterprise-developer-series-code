@@ -487,6 +487,65 @@ export class FormHydrator {
   _sleep(ms) { return new Promise((resolve) => setTimeout(resolve, ms)); }
 }
 
+// --------------------------------------
+// Convenience helpers for bootstraps/ESM
+// --------------------------------------
+/**
+ * Factory to create a configured hydrator instance.
+ * Keeps the primary export clean while giving bootstrap code
+ * a single call to create a shared instance.
+ * @param {ConstructorParameters<typeof FormHydrator>[0]} options
+ * @returns {FormHydrator}
+ */
+export function createHydrator(options = {}) {
+  return new FormHydrator(options);
+}
+
+/**
+ * Thin wrapper to hydrate a single form using an existing instance.
+ * @param {FormHydrator} hydrator
+ * @param {string} formKey
+ * @param {CallOptions} [opts]
+ * @returns {Promise<HydrationPayload>}
+ */
+export async function getFormWith(hydrator, formKey, opts = {}) {
+  if (!hydrator || typeof hydrator.hydrate !== 'function') {
+    throw new FormHydratorError('A valid FormHydrator instance is required.', 'EBADARGS');
+  }
+  return hydrator.hydrate(formKey, opts);
+}
+
+/**
+ * Hydrate all elements annotated with [data-form-key] within a root node,
+ * using a provided shared FormHydrator instance. This is side-effect free:
+ * it only annotates the DOM with data-* attributes so your renderer can
+ * mount real UI when you’re ready.
+ *
+ * @param {FormHydrator} hydrator
+ * @param {ParentNode} [root=document]
+ */
+export async function hydrateFormsInDOMWith(hydrator, root = (typeof document !== 'undefined' ? document : undefined)) {
+  if (!hydrator || typeof hydrator.hydrate !== 'function') {
+    throw new FormHydratorError('A valid FormHydrator instance is required.', 'EBADARGS');
+  }
+  if (!root || typeof root.querySelectorAll !== 'function') return;
+
+  const targets = Array.from(root.querySelectorAll('[data-form-key]'));
+  for (const el of targets) {
+    const key = el.getAttribute('data-form-key') || '';
+    try {
+      const payload = await hydrator.hydrate(key);
+      el.dataset.formId = String(payload.id);
+      el.dataset.hydrated = 'true';
+      // leave room for your renderer hook:
+      // el.dispatchEvent(new CustomEvent('formidable:hydrated', { detail: payload }));
+    } catch (err) {
+      el.dataset.hydrated = 'error';
+      el.dataset.hydrateError = err && (err.code || err.status || err.message) || 'error';
+    }
+  }
+}
+
 // =========================
 // Usage Examples
 // =========================

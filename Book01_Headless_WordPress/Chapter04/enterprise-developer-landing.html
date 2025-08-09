@@ -1,0 +1,661 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" href="https://masterminds-enterprise-developer-series.com/images/site-identity-blueprint-E-75x75.png" sizes="32x32">
+    <link rel="icon" href="https://masterminds-enterprise-developer-series.com/images/site-identity-blueprint-E-256x256.png" sizes="192x192">
+    <link rel="apple-touch-icon" href="https://masterminds-enterprise-developer-series.com/images/site-identity-blueprint-E-256x256.png">
+    <meta name="msapplication-TileImage" content="https://masterminds-enterprise-developer-series.com/images/site-identity-blueprint-E-300x300.png">
+    <title>Masterminds Enterprise Developer Series | Master Advanced Development</title>
+    <meta name="description" content="A definitive book series for developers serious about structured data, scalable architecture, and real-world WordPress integrations.">
+    <!-- Optional: help the browser connect early to your asset host -->
+    <!-- <link rel="preconnect" href="https://cdn.example.com" crossorigin> -->
+
+    <link rel="canonical" href="https://masterminds-enterprise-developer-series.com/">
+
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://masterminds-enterprise-developer-series.com/">
+    <meta property="og:title" content="Masterminds Enterprise Developer Series">
+    <meta property="og:description" content="A definitive book series for developers serious about structured data, scalable architecture, and real-world WordPress integrations.">
+    <meta property="og:image" content="https://masterminds-enterprise-developer-series.com/images/social-share-1200x630.webp">
+
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Masterminds Enterprise Developer Series">
+    <meta name="twitter:description" content="A definitive book series for developers serious about structured data, scalable architecture, and real-world WordPress integrations.">
+    <meta name="twitter:image" content="https://masterminds-enterprise-developer-series.com/images/social-share-1200x630.webp">
+
+  <!-- Preload the most-used font(s) to reduce layout shift -->
+  <link rel="preload" href="/assets/fonts/atkinson-hyperlegible-next-v6-latin-800.woff2"
+        as="font" type="font/woff2">
+    <link rel="modulepreload" href="/assets/js/form_hydrator_class_vanilla.js?v=3006">
+    <!-- CSS: fonts first, then page styles -->
+    <link rel="stylesheet" href="/assets/css/meds_common.css">
+    <link rel="stylesheet" href="/assets/css/meds_front_page.css">
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@graph": [
+        {
+            "@type": "Organization",
+            "@id": "https://masterminds-enterprise-developer-series.com/#org",
+            "name": "Masterminds Enterprise Developer Series",
+            "url": "https://masterminds-enterprise-developer-series.com/",
+            "logo": {
+            "@type": "ImageObject",
+            "url": "https://masterminds-enterprise-developer-series.com/images/logo-512x512.png"
+            },
+            "sameAs": [
+            "https://www.linkedin.com/in/victorfont/",
+            "https://x.com/vfont",
+            "https://github.com/vfontjr/enterprise-developer-series-code",
+            "https://www.facebook.com/groups/formidablemasterminds"
+            ]
+        },
+        {
+            "@type": "Person",
+            "@id": "https://masterminds-enterprise-developer-series.com/#victor",
+            "name": "Victor M. Font Jr.",
+            "url": "https://masterminds-enterprise-developer-series.com/#author",
+            "sameAs": [
+            "https://www.linkedin.com/in/victorfont/",
+            "https://x.com/vfont",
+            "https://github.com/vfontjr/enterprise-developer-series-code",
+            "https://www.facebook.com/groups/formidablemasterminds"
+            ],
+            "affiliation": { "@id": "https://masterminds-enterprise-developer-series.com/#org" }
+        }
+        ]
+        }
+    </script>
+    <script type="application/ld+json">
+        {
+        "@context": "https://schema.org",
+        "@type": "BookSeries",
+        "@id": "https://masterminds-enterprise-developer-series.com/#series",
+        "name": "Masterminds Enterprise Developer Series",
+        "url": "https://masterminds-enterprise-developer-series.com/",
+        "author": { "@id": "https://masterminds-enterprise-developer-series.com/#victor" },
+        "publisher": { "@id": "https://masterminds-enterprise-developer-series.com/#org" },
+        "workExample": [
+        {
+            "@type": "Book",
+            "name": "Headless WordPress, Formidable Power",
+            "image": "https://masterminds-enterprise-developer-series.com/images/Book01_cover-art.svg",
+            "bookEdition": "2nd edition",
+            "description": "An Enterprise Guide to Structured Data, APIs, and JavaScript Frontends",
+            "url": "https://masterminds-enterprise-developer-series.com/#books"
+        },
+        {
+            "@type": "Book",
+            "name": "Relational WordPress",
+            "image": "https://masterminds-enterprise-developer-series.com/images/Book02_cover-art.svg",
+            "bookEdition": "1st edition",
+            "description": "Database Design and Performance for Formidable Developers",
+            "url": "https://masterminds-enterprise-developer-series.com/#books"
+        },
+        {
+            "@type": "Book",
+            "name": "Formidable Workflows",
+            "image": "https://masterminds-enterprise-developer-series.com/images/Book03_cover-art.svg",
+            "description": "Automating Business Processes with WordPress",
+            "url": "https://masterminds-enterprise-developer-series.com/#books"
+        },
+        {
+            "@type": "Book",
+            "name": "Securing the Stack",
+            "image": "https://masterminds-enterprise-developer-series.com/images/Book04_cover-art.svg",
+            "description": "Identity and Access in WordPress Applications",
+            "url": "https://masterminds-enterprise-developer-series.com/#books"
+        },
+        {
+            "@type": "Book",
+            "name": "Composable WordPress",
+            "image": "https://masterminds-enterprise-developer-series.com/images/Book05_cover-art.svg",
+            "description": "Building API-Driven, Scalable, and Maintainable WordPress Applications",
+            "url": "https://masterminds-enterprise-developer-series.com/#books"
+        },
+        {
+            "@type": "Book",
+            "name": "The Formidable Developer's Playbook",
+            "image": "https://masterminds-enterprise-developer-series.com/images/Book06_cover-art.svg",
+            "description": "Deep dive into WordPress core APIs and Formidable Forms extensibility for advanced customizations.",
+            "url": "https://masterminds-enterprise-developer-series.com/#books"
+            },
+            {
+            "@type": "Book",
+            "name": "Visualizing Data",
+            "image": "https://masterminds-enterprise-developer-series.com/images/Book07_cover-art.svg",
+            "description": "Transform raw enterprise datasets into actionable insights with practical visualization techniques, interactive dashboards, and optimized reporting workflows in WordPress and Formidable Forms.",
+            "url": "https://masterminds-enterprise-developer-series.com/#books"
+            },
+            {
+            "@type": "Book",
+            "name": "The Enterprise WordPress Blueprint",
+            "image": "https://masterminds-enterprise-developer-series.com/images/Book08_cover-art.svg",
+            "description": "A complete architectural guide distilling the Masterminds Enterprise Developer Series into a reusable framework for building secure, scalable, and future-ready WordPress solutions.",
+            "url": "https://masterminds-enterprise-developer-series.com/#books"
+            }
+        ]
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+    {
+        "@type": "Question",
+        "name": "Can I read the books out of order?",
+        "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Yes! Each book in the series is designed to be standalone, focusing on specific aspects of enterprise WordPress development. While there are references between books, you can start with whichever topic is most relevant to your current projects."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "Do I need an Elite Formidable Forms license?",
+        "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "While many examples use Formidable Forms features, the concepts and patterns taught are applicable to any WordPress development. However, to follow along with all code examples, an Elite license is recommended for access to all features and add-ons."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "Are these suitable for agencies or solo developers?",
+        "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "Absolutely! The series is designed for both scenarios. Agencies will benefit from the scalable architecture patterns and team collaboration techniques, while solo developers will appreciate the comprehensive coverage that helps them deliver enterprise-quality solutions independently."
+        }
+    },
+    {
+        "@type": "Question",
+        "name": "Will there be video or course versions?",
+        "acceptedAnswer": {
+        "@type": "Answer",
+        "text": "We're currently developing video companions for select books in the series. Newsletter subscribers will receive early access and special pricing when these become available. Each video course will include hands-on labs and downloadable project files."
+        }
+    }
+    ]
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": "https://masterminds-enterprise-developer-series.com/#website",
+    "url": "https://masterminds-enterprise-developer-series.com/",
+    "name": "Masterminds Enterprise Developer Series",
+    "publisher": { "@id": "https://masterminds-enterprise-developer-series.com/#org" },
+    "inLanguage": "en"
+    }
+    </script>
+    <script type="application/ld+json">
+    {
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    "@id": "https://masterminds-enterprise-developer-series.com/#webpage",
+    "url": "https://masterminds-enterprise-developer-series.com/",
+    "name": "Masterminds Enterprise Developer Series | Master Advanced Development",
+    "description": "A definitive book series for developers serious about structured data, scalable architecture, and real-world WordPress integrations.",
+    "isPartOf": { "@id": "https://masterminds-enterprise-developer-series.com/#website" },        "primaryImageOfPage": {
+    "@type": "ImageObject",
+    "url": "https://masterminds-enterprise-developer-series.com/images/Book01_cover-art.svg"
+    }
+    }
+    </script>
+</head>
+    <body>
+    <!-- Skip to main content for accessibility -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
+    <!-- Navigation -->
+    <nav aria-label="Main navigation">
+        <div class="nav-container">
+            <div class="logo"><a href="/" class="logo" aria-label="Enterprise Developer Home">Enterprise Developer</a></div>
+            <ul class="nav-links">
+                <li><a href="#home">Home</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="#books">Books</a></li>
+                <li><a href="#testimonials">Reviews</a></li>
+                <li><a href="#author">Author</a></li>
+                <li><a href="#contact">Contact</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <main id="main-content">
+    <section class="hero" id="home">
+        <div class="container">
+            <div class="hero-content">
+                <h1>Master Enterprise Application Development with WordPress and Formidable Forms</h1>
+                <p class="subtitle">A definitive book series for developers serious about structured data, scalable architecture, and real-world integrations.</p>
+
+                <!-- 3D Book Carousel -->
+                <div class="book-carousel-container">
+                    <div class="book-carousel" tabindex="0" aria-label="Featured Books Carousel" aria-live="polite" role="region">
+                        <div class="carousel-track" role="list" aria-roledescription="carousel" aria-live="polite">
+                            <div class="book-cover" role="listitem" aria-hidden="true" style="--rotation: 0deg;">
+                                <figure>
+                                    <img src="/images/Book01_cover-art.svg" style="width:200px; height:300px;" alt="Cover of Book 1: Headless WordPress, Formidable Power">
+                                </figure>
+                            </div>
+                            <div class="book-cover" role="listitem" aria-hidden="true" style="--rotation: 72deg;">
+                                <figure>
+                                    <img src="/images/Book02_cover-art.svg" style="width:200px; height:300px;" alt="Cover of Book 2: Relational WordPress – Database Design and Performance">
+                                </figure>
+                            </div>
+                            <div class="book-cover" role="listitem" aria-hidden="true" style="--rotation: 144deg;">
+                                <figure>
+                                    <img src="/images/Book03_cover-art.svg" style="width:200px; height:300px;" alt="Cover of Book 3: Formidable Workflows – Automating Business Processes">
+                                </figure>
+                            </div>
+                            <div class="book-cover" role="listitem" aria-hidden="true" style="--rotation: 216deg;">
+                                <figure>
+                                    <img src="/images/Book04_cover-art.svg" style="width:200px; height:300px;" alt="Cover of Book 4: Securing the Stack - Identity and Access in WordPress Applications">
+                                </figure>
+                            </div>
+                            <div class="book-cover" role="listitem" aria-hidden="true" style="--rotation: 288deg;">
+                                <figure>
+                                    <img src="/images/Book05_cover-art.svg" style="width:200px; height:300px;" alt="Cover of Book 5: Composable WordPress – Building API-Driven, Scalable, and Maintainable WordPress Applications">
+                                </figure>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="cta-group">
+                    <a href="#books" class="btn btn-primary">Explore the Series</a>
+                    <a href="#newsletter" class="btn btn-secondary">Get Series Updates</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section class="about-section" id="about">
+        <div class="container">
+            <div class="section-header fade-in">
+                <h2 class="section-title">What Is the Masterminds Enterprise Developer Series?</h2>
+                <p class="section-description">
+                    Written by Victor M. Font Jr. and aligned with Formidable Masterminds' mission, this comprehensive series provides structured guidance for building complex WordPress applications that scale.
+                </p>
+            </div>
+
+            <div class="value-grid">
+                <div class="value-card fade-in stagger-1">
+                    <div class="value-icon">
+                        <figure>
+                            <img src="/images/Structured-Data-Mastery.svg" style="width:100px; height:100px;" alt="Decorative icon representing Structured Data Mastery">
+                        </figure>
+                    </div>
+                    <h3>Structured Data Mastery</h3>
+                    <p>Learn to handle complex data relationships and optimize database performance for enterprise-scale applications.</p>
+                </div>
+                <div class="value-card fade-in stagger-2">
+                    <div class="value-icon">
+                        <figure>
+                            <img src="/images/Real-World-Code-Examples.svg" style="width:100px; height:100px;" alt="Decorative icon representing Real-World Code Examples">
+                        </figure>
+                    </div>
+                    <h3>Real-World Code Examples</h3>
+                    <p>Every concept is illustrated with production-ready code samples and performance optimization strategies.</p>
+                </div>
+                <div class="value-card fade-in stagger-3">
+                    <div class="value-icon">
+                        <figure>
+                            <img src="/images/Modern-Architecture.svg" style="width:100px; height:100px;" alt="Decorative icon representing Modern Architecture">
+                        </figure>
+                    </div>
+                    <h3>Modern Architecture</h3>
+                    <p>Master headless CMS implementations, API security, automated workflows, and microservices integration.</p>
+                </div>
+                <div class="value-card fade-in stagger-4">
+                    <div class="value-icon">
+                        <figure>
+                            <img src="/images/Team-Ready-Solutions.svg" style="width:100px; height:100px;" alt="Decorative icon representing Team-Ready Solutions">
+                        </figure>
+                    </div>
+                    <h3>Team-Ready Solutions</h3>
+                    <p>Written for developers, architects, and technical teams building mission-critical WordPress applications.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Books Grid Section -->
+    <section class="books-section" id="books">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">The Complete Series</h2>
+                <p class="section-description">12 volumes covering every aspect of enterprise development with WordPress and Formidable Forms</p>
+            </div>
+
+            <div class="filter-tabs">
+                <button class="filter-tab active" data-filter="all">All Books</button>
+                <button class="filter-tab" data-filter="architecture">Architecture</button>
+                <button class="filter-tab" data-filter="data">Data & Performance</button>
+                <button class="filter-tab" data-filter="workflow">Workflows</button>
+                <button class="filter-tab" data-filter="security">Security</button>
+            </div>
+
+            <div class="books-grid">
+                <!-- Book 1 -->
+                <div class="book-card fade-in" data-category="architecture">
+                    <div class="book-card-image">
+                        <figure>
+                            <img src="/images/Book01_cover-art.svg" style="width:148px; height:220px;" alt="Cover of Book 1: Headless WordPress, Formidable Power">
+                        </figure>
+                    </div>
+                    <div class="book-card-content">
+                        <h3 class="book-title">Headless WordPress, Formidable Power</h3>
+                        <p class="book-subtitle">An Enterprise Guide to Structured Data, APIs, and JavaScript Frontends</p>
+                        <p class="book-description">Discover how to decouple WordPress from the frontend and build blazing-fast applications with modern JavaScript frameworks.</p>
+                        <div class="book-actions">
+                            <a href="#" class="book-btn book-btn-primary">Buy Now</a>
+                            <a href="#" class="book-btn book-btn-secondary">Preview</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Book 2 -->
+                <div class="book-card fade-in" data-category="architecture">
+                    <div class="book-card-image">
+                        <figure>
+                            <img src="/images/Book02_cover-art.svg" style="width:148px; height:220px;" alt="Cover of Book 2: Relational WordPress – Database Design and Performance">
+                        </figure>
+                    </div>
+                    <div class="book-card-content">
+                        <h3 class="book-title">Relational WordPress</h3>
+                        <p class="book-subtitle">Database Design and Performance for Formidable Developers</p>
+                        <p class="book-description">Master SQL optimization, relational thinking, and overcome metadata bottlenecks in WordPress applications.</p>
+                        <div class="book-actions">
+                            <a href="#" class="book-btn book-btn-primary">Buy Now</a>
+                            <a href="#" class="book-btn book-btn-secondary">Preview</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Book 3 -->
+                <div class="book-card fade-in" data-category="workflow">
+                    <div class="book-card-image">
+                        <figure>
+                            <img src="/images/Book03_cover-art.svg" style="width:148px; height:220px;" alt="Cover of Book 3: Formidable Workflows – Automating Business Processes">
+                        </figure>
+                    </div>
+                    <div class="book-card-content">
+                        <h3 class="book-title">Formidable Workflows</h3>
+                        <p class="book-subtitle">Automating Business Processes with WordPress</p>
+                        <p class="book-description">Build sophisticated automation systems that streamline operations and integrate with enterprise tools.</p>
+                        <div class="book-actions">
+                            <a href="#" class="book-btn book-btn-primary">Buy Now</a>
+                            <a href="#" class="book-btn book-btn-secondary">Preview</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Book 4 -->
+                <div class="book-card fade-in" data-category="security">
+                    <div class="book-card-image">
+                        <figure>
+                            <img src="/images/Book04_cover-art.svg" style="width:148px; height:220px;" alt="Cover of Book 4: Securing the Stack - Identity and Access in WordPress Applications">
+                        </figure>
+                    </div>
+                    <div class="book-card-content">
+                        <h3 class="book-title">Securing the Stack</h3>
+                        <p class="book-subtitle">Identity and Access in WordPress Applications</p>
+                        <p class="book-description">Implement enterprise-grade security, authentication, and authorization systems in WordPress.</p>
+                        <div class="book-actions">
+                            <a href="#" class="book-btn book-btn-primary">Buy Now</a>
+                            <a href="#" class="book-btn book-btn-secondary">Preview</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Book 5 -->
+                <div class="book-card fade-in" data-category="data">
+                    <div class="book-card-image">
+                        <figure>
+                            <img src="/images/Book05_cover-art.svg" style="width:148px; height:220px;" alt="Cover of Book 5: Composable WordPress – Building API-Driven, Scalable, and Maintainable WordPress Applications">
+                        </figure>
+                    </div>
+                    <div class="book-card-content">
+                        <h3 class="book-title">Composable WordPress</h3>
+                        <p class="book-subtitle">Building API-Driven, Scalable, and Maintainable WordPress Applications</p>
+                        <p class="book-description">Unlock a modular future with custom plugins, REST endpoints, and decoupled frontends. Learn how to think in components while keeping WordPress as your orchestrator.</p>
+                        <div class="book-actions">
+                            <a href="#" class="book-btn book-btn-primary">Pre-order</a>
+                            <a href="#" class="book-btn book-btn-secondary">Notify Me</a>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Book 6 -->
+                <div class="book-card fade-in" data-category="architecture">
+                    <div class="book-card-image">
+                        <figure>
+                            <img src="/images/Book06_cover-art.svg" style="width:148px; height:220px;" alt="Cover of Book 5: The Formidable Developer's Playbook – Hooks, Filters, and API Mastery">
+                        </figure>
+                    </div>
+                    <div class="book-card-content">
+                        <h3 class="book-title">The Formidable Developer's Playbook</h3>
+                        <p class="book-subtitle">Hooks, Filters, and API Mastery</p>
+                        <p class="book-description">Deep dive into WordPress core APIs and Formidable Forms extensibility for advanced customizations.</p>
+                        <div class="book-actions">
+                            <a href="#" class="book-btn book-btn-primary">Buy Now</a>
+                            <a href="#" class="book-btn book-btn-secondary">Preview</a>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- Testimonials Section -->
+    <section class="testimonials-section" id="testimonials">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">What Developers Are Saying</h2>
+                <p class="section-description">Real feedback from professionals using these books in production</p>
+            </div>
+
+            <div class="testimonial-grid">
+                <div class="testimonial-card fade-in stagger-1">
+                    <p class="testimonial-quote">
+                        This series completely transformed how we approach WordPress development. The headless architecture patterns alone saved us months of trial and error.
+                    </p>
+                    <div class="testimonial-author">
+                        <div class="author-avatar"></div>
+                        <div class="author-info">
+                            <div class="author-name">Sarah Chen</div>
+                            <div class="author-role">Lead Developer, TechCorp</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="testimonial-card fade-in stagger-2">
+                    <p class="testimonial-quote">
+                        Finally, WordPress documentation that speaks to enterprise developers. The database optimization techniques improved our query performance by 300%.
+                    </p>
+                    <div class="testimonial-author">
+                        <div class="author-avatar"></div>
+                        <div class="author-info">
+                            <div class="author-name">Michael Rodriguez</div>
+                            <div class="author-role">CTO, Digital Agency</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="testimonial-card fade-in stagger-3">
+                    <p class="testimonial-quote">
+                        Victor's approach to Formidable Forms is revolutionary. We've built complex applications we never thought possible with WordPress.
+                    </p>
+                    <div class="testimonial-author">
+                        <div class="author-avatar"></div>
+                        <div class="author-info">
+                            <div class="author-name">Emily Watson</div>
+                            <div class="author-role">Solutions Architect</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Newsletter Section -->
+    <section class="newsletter-section" id="newsletter">
+        <div class="container">
+            <h2 class="newsletter-title">Stay Ahead of the Curve</h2>
+            <p class="newsletter-description">
+                Get exclusive series updates, free resources, and launch announcements
+            </p>
+            <form class="newsletter-form">
+                <input type="email" class="email-input" placeholder="Enter your email address" aria-label="Email address" required>
+                <button type="submit" class="btn btn-newsletter" aria-label="Subscribe to newsletter">
+                    Subscribe Now
+                </button>
+            </form>
+        </div>
+    </section>
+
+    <!-- Author Section -->
+    <section class="author-section" id="author">
+        <div class="container">
+            <div class="author-container">
+                <div class="author-image fade-in" style="align-content: center; text-align: center;">
+                    <figure>
+                        <img src="/images/author-headshot-transparent.svg" alt="Victor M. Font Jr. photo with transparent background" style="width: 270px; height:240px;">
+                    </figure>
+                </div>
+                <div class="author-content fade-in stagger-1">
+                    <h2 class="author-main-name">Victor M. Font Jr.</h2>
+                    <p class="author-bio">
+                        Victor M. Font Jr. is the founder of Formidable Masterminds and a recognized expert in enterprise application development. With over three decades of experience in software engineering and a background in emergency management systems, Victor brings a unique perspective to WordPress architecture and scalable application design. He's passionate about empowering developers to build mission-critical applications with WordPress and Formidable Forms.
+                    </p>
+                    <div class="social-links">
+                        <a href="https://www.linkedin.com/in/victorfont/" class="social-link" aria-label="LinkedIn" target="_blank"><img src="/images/linkedin-icon.svg" style="width:44px; height: auto;" alt="LinkedIn social media icon"></a>
+                        <a href="https://x.com/vfont" class="social-link" aria-label="Twitter/X" target="_blank"><img src="/images/x-icon.svg" style="width:44px; height: auto;" alt="X social media icon"></a>
+                        <a href="https://github.com/vfontjr/enterprise-developer-series-code" class="social-link rounded" aria-label="GitHub" target="_blank"><img src="/images/github-icon.svg" style="width:44px; height: auto;" alt="GitHub repository icon"></a>
+                        <a href="https://www.facebook.com/groups/formidablemasterminds" class="social-link rounded" aria-label="Facebook" target="_blank"><img src="/images/facebook-icon.svg" style="width:44px; height: auto;" alt="Facebook social media icon"></a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ Section -->
+    <section class="faq-section" id="faq">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Frequently Asked Questions</h2>
+            </div>
+            <div class="faq-container">
+                <div class="faq-item">
+                    <div class="faq-question">
+                        Can I read the books out of order?
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            Yes! Each book in the series is designed to be standalone, focusing on specific aspects of enterprise WordPress development. While there are references between books, you can start with whichever topic is most relevant to your current projects.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        Do I need an Elite Formidable Forms license?
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            While many examples use Formidable Forms features, the concepts and patterns taught are applicable to any WordPress development. However, to follow along with all code examples, an Elite license is recommended for access to all features and add-ons.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        Are these suitable for agencies or solo developers?
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            Absolutely! The series is designed for both scenarios. Agencies will benefit from the scalable architecture patterns and team collaboration techniques, while solo developers will appreciate the comprehensive coverage that helps them deliver enterprise-quality solutions independently.
+                        </div>
+                    </div>
+                </div>
+
+                <div class="faq-item">
+                    <div class="faq-question">
+                        Will there be video or course versions?
+                        <span class="faq-toggle">+</span>
+                    </div>
+                    <div class="faq-answer">
+                        <div class="faq-answer-content">
+                            We're currently developing video companions for select books in the series. Newsletter subscribers will receive early access and special pricing when these become available. Each video course will include hands-on labs and downloadable project files.
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-column">
+                    <h4>Resources</h4>
+                    <ul>
+                        <li><a href="https://formidable-masterminds.com/developers-corner/">Developer Blog</a></li>
+                        <li><a href="https://github.com/vfontjr/enterprise-developer-series-code">Code Samples</a></li>
+                        <li><a href="#">Documentation</a></li>
+                        <li><a href="#">Community Forum</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4>Company</h4>
+                    <ul>
+                        <li><a href="#">About</a></li>
+                        <li><a href="#">Formidable Masterminds</a></li>
+                        <li><a href="#">Contact</a></li>
+                        <li><a href="#">Press Kit</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4>Connect</h4>
+                    <ul>
+                        <li><a href="#">LinkedIn</a></li>
+                        <li><a href="#">GitHub</a></li>
+                        <li><a href="#">Twitter/X</a></li>
+                        <li><a href="#">Newsletter</a></li>
+                    </ul>
+                </div>
+                <div class="footer-column">
+                    <h4>Legal</h4>
+                    <ul>
+                        <li><a href="#">Terms of Service</a></li>
+                        <li><a href="#">Privacy Policy</a></li>
+                        <li><a href="#">Accessibility</a></li>
+                        <li><a href="#">AI Image Disclosure</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>&copy; 2025 Masterminds Enterprise Developer Series. All rights reserved. | Built with passion for the WordPress community</p>
+            </div>
+        </div>
+    </footer>
+    <script src="/assets/js/meds_front_page.js"></script>
+    <script type="module" src="/assets/js/esm-bootstrap.js?v=3006"></script>
+    <script type="module">
+        import { hydrator, getForm } from '/assets/js/esm-bootstrap.js?v=3006';
+        const { id, metadata, fields } = await getForm('contact-form');
+        // or: const { id, metadata, fields } = await hydrator.hydrate('contact-form');
+    </script>
+</body>
+</html>
