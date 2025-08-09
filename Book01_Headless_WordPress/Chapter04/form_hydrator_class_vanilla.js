@@ -4,6 +4,10 @@
  *
  * @author Headless WordPress, Formidable Power, 2nd ed.
  * @license MIT
+ * @version 2.0.0
+ * @since 2025-08-09
+ * @see {@link https://github.com/enterprise-developer-series/enterprise-developer-series-code/blob/main/Book01_Headless_WordPress/Chapter04/form_hydrator_class_vanilla.js}
+ * @see Headless WordPress, Formidable Power, 2nd ed., Chapter 4
  *
  * Purpose
  * -------
@@ -46,6 +50,7 @@ const NoopLogger = {
  * Simple in-memory TTL cache suitable for browsers and small apps.
  * For scale or persistence, provide your own cache via the options.
  */
+
 class SimpleTTLCache {
   constructor() {
     /** @type {Map<string, {expires:number, value:any}>} */
@@ -83,6 +88,33 @@ class SimpleTTLCache {
     this._store.delete(key);
   }
 }
+
+/**
+ * @typedef {Object} FormField
+ * @property {number} id Numeric field ID
+ * @property {string} key Formidable field key (human-stable identifier)
+ * @property {string} type Field type (e.g., 'text', 'email', 'select', 'html', etc.)
+ * @property {string} [name] Field label
+ * @property {any}    [defaultValue]
+ * @property {boolean} [required]
+ * @property {Array<any>} [options] For selects/radios/checkboxes
+ * @property {Object<string, any>} [config] Vendor-specific extras
+ */
+
+/**
+ * @typedef {Object} FormMetadata
+ * @property {number} id Numeric form ID
+ * @property {string} key Formidable form key
+ * @property {string} name Human-readable name
+ * @property {Object<string, any>} settings Raw settings object returned by the API
+ */
+
+/**
+ * @typedef {Object} HydrationPayload
+ * @property {number} id
+ * @property {FormMetadata} metadata
+ * @property {Array<FormField>} fields
+ */
 
 export class FormHydrator {
   /**
@@ -174,7 +206,7 @@ export class FormHydrator {
    * const { id, metadata, fields } = await hydrator.hydrate('contact_form');
    *
    * @param {string} formKey
-   * @returns {Promise<{ id:number, metadata:object, fields:Array<object> }>} Hydration payload
+   * @returns {Promise<HydrationPayload>} Hydration payload
    */
   async hydrate(formKey) {
     const id = await this.getFormIdByKey(formKey);
@@ -220,6 +252,69 @@ export class FormHydrator {
     if (!Number.isFinite(formId)) throw new Error('A numeric formId is required.');
     const path = this._routes.formFields(formId);
     return this._getWithCacheAndRetry(path);
+  }
+
+  // =========================
+  // Public Utilities
+  // =========================
+
+  /**
+   * Set or overwrite a default header for subsequent requests.
+   * Useful for runtime auth token refresh.
+   * @param {string} name
+   * @param {string} value
+   */
+  setHeader(name, value) {
+    if (!name) throw new Error('Header name is required.');
+    this._headers[name] = value;
+  }
+
+  /**
+   * Remove a default header set on the hydrator instance.
+   * @param {string} name
+   */
+  removeHeader(name) {
+    delete this._headers[name];
+  }
+
+  /**
+   * Invalidate cache entries associated with a specific form ID.
+   * Safe to call even if entries do not exist. No-op if cache doesn't support delete failures.
+   * @param {number} formId
+   */
+  async invalidateByFormId(formId) {
+    if (!Number.isFinite(formId)) throw new Error('A numeric formId is required.');
+    try {
+      await this._cache.delete(this._cacheKey(this._routes.formMeta(formId)));
+      await this._cache.delete(this._cacheKey(this._routes.formFields(formId)));
+    } catch (e) {
+      this._logger.warn('[FormHydrator] cache invalidate (formId) failed', e);
+    }
+  }
+
+  /**
+   * Invalidate cache entries associated with a specific form key.
+   * This removes the idByKey entry and, if resolvable, the derived ID entries as well.
+   * @param {string} formKey
+   */
+  async invalidateByFormKey(formKey) {
+    if (!formKey) throw new Error('A non-empty formKey is required.');
+    try {
+      // Remove the key->id mapping first
+      await this._cache.delete(this._cacheKey(this._routes.idByKey(formKey)));
+    } catch (e) {
+      this._logger.warn('[FormHydrator] cache invalidate (formKey mapping) failed', e);
+    }
+
+    // Optionally remove derived entries if we can still resolve the ID
+    try {
+      const idData = await this._getWithRetry(this._routes.idByKey(formKey));
+      if (idData && typeof idData.id === 'number') {
+        await this.invalidateByFormId(idData.id);
+      }
+    } catch {
+      // If we cannot resolve the id right now, best-effort invalidation already occurred.
+    }
   }
 
   // =========================
@@ -406,3 +501,90 @@ export class FormHydrator {
 // };
 // const hydrator = new FormHydrator({ baseUrl: process.env.SITE_URL, fetchImpl: fetch, cache: redisCache });
 // const payload = await hydrator.hydrate('contact_form');
+
+/*
+================================================================================
+TypeScript Editor Hints (Optional)
+--------------------------------------------------------------------------------
+This file uses JSDoc to describe types. Most editors (VS Code) will infer types
+from these typedefs. If you want even stronger tooling in TS projects without
+converting this file, add the following in a sibling `.d.ts` file (example):
+
+  // form_hydrator_class_vanilla.d.ts
+  export type FormField = import('./form_hydrator_class_vanilla.js').FormField;
+  export type FormMetadata = import('./form_hydrator_class_vanilla.js').FormMetadata;
+  export type HydrationPayload = import('./form_hydrator_class_vanilla.js').HydrationPayload;
+  export class FormHydrator {
+    constructor(options?: any);
+    hydrate(formKey: string): Promise<HydrationPayload>;
+    getFormIdByKey(formKey: string): Promise<number>;
+    getFormMetadata(formId: number): Promise<FormMetadata>;
+    getFormFields(formId: number): Promise<FormField[]>;
+    setHeader(name: string, value: string): void;
+    removeHeader(name: string): void;
+    invalidateByFormId(formId: number): Promise<void>;
+    invalidateByFormKey(formKey: string): Promise<void>;
+  }
+
+--------------------------------------------------------------------------------
+Minimal Unit-Test Scaffold (Jest/Vitest-style, Pseudocode)
+--------------------------------------------------------------------------------
+import { FormHydrator } from './form_hydrator_class_vanilla.js';
+
+describe('FormHydrator', () => {
+  test('hydrates via key with caching', async () => {
+    const calls: string[] = [];
+    const fakeFetch = async (url: string) => {
+      calls.push(url);
+      if (url.endsWith('/form-id/contact_form'))
+        return ok({ id: 123 });
+      if (url.endsWith('/forms/123'))
+        return ok({ id: 123, key: 'contact_form', name: 'Contact', settings: {} });
+      if (url.endsWith('/forms/123/fields'))
+        return ok([{ id: 1, key: 'name', type: 'text' }]);
+      throw new Error('Unexpected URL ' + url);
+    };
+
+    const cache = new Map();
+    const cacheLike = {
+      get: (k) => cache.get(k),
+      set: (k, v) => cache.set(k, v),
+      delete: (k) => cache.delete(k),
+    };
+
+    const hydrator = new FormHydrator({ fetchImpl: fakeFetch, baseUrl: 'https://site.test', cache: cacheLike });
+    const first = await hydrator.hydrate('contact_form');
+    const second = await hydrator.hydrate('contact_form');
+
+    expect(first.id).toBe(123);
+    expect(second.id).toBe(123);
+    // Only 3 network calls total (id, meta, fields) thanks to cache
+    expect(calls.length).toBe(3);
+  });
+
+  test('retries on 502 and eventually succeeds', async () => {
+    let tries = 0;
+    const fakeFetch = async (url: string) => {
+      if (url.endsWith('/form-id/contact_form')) return ok({ id: 5 });
+      if (url.endsWith('/forms/5')) {
+        tries++;
+        if (tries < 3) return fail(502);
+        return ok({ id: 5, key: 'contact_form', name: 'C', settings: {} });
+      }
+      if (url.endsWith('/forms/5/fields')) return ok([]);
+      throw new Error('Unexpected URL ' + url);
+    };
+
+    const hydrator = new FormHydrator({ fetchImpl: fakeFetch, baseUrl: 'https://site.test', retry: { maxRetries: 3, backoffBaseMs: 1, backoffCapMs: 2, jitter: false } });
+    const res = await hydrator.hydrate('contact_form');
+    expect(res.id).toBe(5);
+    expect(tries).toBe(3); // 2 failures + 1 success
+  });
+});
+
+// Helpers to emulate fetch API responses in tests
+function ok(json: any) { return { ok: true, status: 200, statusText: 'OK', json: async () => json }; }
+function fail(status: number) { return { ok: false, status, statusText: 'ERR', text: async () => '' }; }
+
+================================================================================
+*/
