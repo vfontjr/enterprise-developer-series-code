@@ -1,5 +1,15 @@
-/** Example usage:
-hydrateForm('contact_form');
+/**
+ * Simplified “Familiar” Starter Script for Hydrating a Formidable Form
+ *
+ * This script demonstrates a minimal and straightforward approach to hydrating a Formidable Form
+ * in a headless WordPress environment. It is intentionally kept simple for teaching purposes,
+ * providing a clear and easy-to-follow example of fetching form data by key, including metadata
+ * and fields.
+ *
+ * WordPress and Formidable developers may recognize this style as typical of quick proof-of-concept
+ * code or admin-side scripting. This script serves as the “before” example in a before-and-after
+ * learning pattern, which will be contrasted later in the chapter with an enterprise-grade
+ * implementation that features caching, retries, nonce handling, and other robustness improvements.
  *
  * @author Headless WordPress, Formidable Power, 2nd ed.
  * @license MIT
@@ -64,3 +74,19 @@ async function hydrateForm(formKey) {
     return null;
   }
 }
+
+/**
+ * Example usage of hydrateForm:
+ *
+ * hydrateForm('contact-us')
+ *   .then(hydratedForm => {
+ *     if (hydratedForm) {
+ *       console.log('Form successfully hydrated:', hydratedForm);
+ *     } else {
+ *       console.log('Form hydration returned null due to an error.');
+ *     }
+ *   });
+ *
+ * Note: Errors are caught and logged inside hydrateForm, so the returned promise
+ * resolves to null if hydration fails.
+ */
