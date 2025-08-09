@@ -1,4 +1,9 @@
-/**
+/** Example usage:
+hydrateForm('contact_form');
+ *
+ * @author Headless WordPress, Formidable Power, 2nd ed.
+ * @license MIT
+ *
  * Fetch the form ID by key using the custom REST route
  * @param {string} formKey - The key of the Formidable form
  * @returns {Promise<number>} The form ID
@@ -59,6 +64,3 @@ async function hydrateForm(formKey) {
     return null;
   }
 }
-
-// Example usage:
-hydrateForm('contact_form');
