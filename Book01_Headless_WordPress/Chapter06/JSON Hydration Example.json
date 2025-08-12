@@ -1,0 +1,8 @@
+{
+  "formId": 42,
+  "metadata": { "title": "Contact Us", "description": "We’ll respond within 24 hours" },
+  "fields": [
+    { "key": "name_field", "type": "name", "label": "Your Name", "required": true, "etc": "..." },
+    { "key": "email_field", "type": "email", "label": "Email Address", "required": true, "etc": "..." }
+  ]
+}
