@@ -4,7 +4,7 @@ Welcome to the official code repository for the **Masterminds Enterprise Develop
 
 ## 📚 About the Series
 
-This 12-volume series equips developers, architects, and technical teams with strategies for building scalable, secure, and maintainable WordPress applications using Formidable Forms and modern APIs.
+This 8-volume series equips developers, architects, and technical teams with strategies for building scalable, secure, and maintainable WordPress applications using Formidable Forms and modern APIs.
 
 Explore the series: [https://enterprise-wordpress-developer-series.com](https://enterprise-wordpress-developer-series.com)
 
