@@ -1,4 +1,4 @@
-renderEmailField(field) {
+function renderEmailField(field) {
   const wrapper = document.createElement('div');
   wrapper.classList.add('form-field', 'form-field--email');
 
