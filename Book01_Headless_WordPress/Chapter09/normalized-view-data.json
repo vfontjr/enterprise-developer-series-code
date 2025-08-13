@@ -1,0 +1,9 @@
+{
+  "id": 8123,
+  "view_key": "customer-list",
+  "html": "<ul><li>Jane Doe</li><li>John Smith</li></ul>",
+  "meta": {
+    "display_type": "list",
+    "item_count": 25
+  }
+}
