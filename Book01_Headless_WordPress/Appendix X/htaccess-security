@@ -1,5 +1,9 @@
 <IfModule mod_headers.c>
     Header always unset X-Frame-Options
     Header always unset Content-Security-Policy
-    Header always set Content-Security-Policy "frame-ancestors 'self' https://[example-domain].com https://www.[example-domain].com https://*.[example-domain].com"
+    Header always set Content-Security-Policy
+        "frame-ancestors 'self'
+         https://[your-frontend-domain].com
+         https://www.[your-frontend-domain].com
+         https://*.[your-frontend-domain].com"
 </IfModule>
