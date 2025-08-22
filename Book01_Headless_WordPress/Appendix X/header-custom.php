@@ -2,7 +2,7 @@
 /* Formidable's honeypot fields are rendered at run time.
  * they are "virtual fields" created for a specific purpose and not
  * saved to the database. Reverse engineering Formidable's FrmHoneypot class
- * reveals the honeypot field always use the (max_field_id + 1 as the field id */
+ * reveals the honeypot field always use the (max_field_id + $offset as the field id */
 $frm_settings = FrmAppHelper::get_settings();
 $has_honeypot = ($frm_settings->honeypot === 1) ? true : false;
 if ( $has_honeypot ) {
@@ -25,17 +25,14 @@ if ( $has_honeypot ) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Victor Font Consulting Group, LLC | Get "The Alien Gospel"</title>
-<link rel="stylesheet" id="formidable-css" href="https://victorfont.com/wp-content/plugins/formidable/css/formidableforms.css?ver=8201742" media="all">
-<link rel="stylesheet" id="wp-jquery-ui-dialog-css" href="https://victorfont.com/wp-includes/css/jquery-ui-dialog.min.css?ver=0f1ec753e0e3dfebf43485bbdd91676a" media="all">
-
-<script src="https://victorfont.com/wp-includes/js/jquery/jquery.min.js?ver=3.7.1" id="jquery-core-js"></script>
-
+    <title>[your-domain-title] | [your-page-title]</title>
+<link rel="stylesheet" id="formidable-css" href="https://[your-wordpress-domain].com/wp-content/plugins/formidable/css/formidableforms.css?ver=8201742" media="all">
+<link rel="stylesheet" id="wp-jquery-ui-dialog-css" href="https://[your-wordpress-domain]/wp-includes/css/jquery-ui-dialog.min.css?ver=0f1ec753e0e3dfebf43485bbdd91676a" media="all">
+<script src="https://[your-wordpress-domain].com/wp-includes/js/jquery/jquery.min.js?ver=3.7.1" id="jquery-core-js"></script>
 <?php
-FrmHoneypot::maybe_print_honeypot_css();
 if ( $has_honeypot ) {
-echo "<!-- Formidable's honeypot field -->
-<style>#frm_field_{$honeypot_field_id}_container {visibility:hidden;overflow:hidden;width:0;height:0;position:absolute;}</style>";
+    echo "<!-- Formidable's honeypot field -->
+    <style>#frm_field_{$honeypot_field_id}_container {visibility:hidden;overflow:hidden;width:0;height:0;position:absolute;}</style>";
 }
 ?>
 <style>
